@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { districts } from '../lib/mockData';
+import { getDistricts } from '../lib/api';
+import { District } from '../lib/types';
 
 const employeeLinks = [
   { to: '/app/entry', label: 'Daily Entry' },
@@ -18,6 +20,12 @@ const adminLinks = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const [districts, setDistricts] = useState<District[]>([]);
+
+  useEffect(() => {
+    getDistricts().then(setDistricts).catch(() => setDistricts([]));
+  }, []);
+
   if (!user) return null;
 
   const links = user.role === 'admin' ? adminLinks : employeeLinks;

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import PageHeader from '../../components/PageHeader';
 import ChartCard from '../../components/ChartCard';
 import KpiCard from '../../components/KpiCard';
 import { useAuth } from '../../context/AuthContext';
-import { dailyEntries } from '../../lib/mockData';
+import { getEntries } from '../../lib/api';
 import { METRIC_FIELDS, DailyEntry } from '../../lib/types';
 import { Grain, aggregateByTime, filterByRange, rangeForGrain, currentPeriodRange, previousPeriodRange, sumEntries, percentChange } from '../../lib/aggregate';
 
@@ -12,8 +12,12 @@ export default function Stats() {
   const { user } = useAuth();
   const [grain, setGrain] = useState<Grain>('weekly');
   const [metric, setMetric] = useState<keyof DailyEntry>('schoolsObserved');
+  const [myEntries, setMyEntries] = useState<DailyEntry[]>([]);
 
-  const myEntries = useMemo(() => dailyEntries.filter((e) => e.userId === user!.id), [user]);
+  useEffect(() => {
+    if (!user) return;
+    getEntries({ userId: user.id }).then(setMyEntries).catch(() => setMyEntries([]));
+  }, [user]);
 
   const { start, end } = rangeForGrain(grain);
   const trendData = useMemo(() => aggregateByTime(filterByRange(myEntries, start, end), grain), [myEntries, start, end, grain]);

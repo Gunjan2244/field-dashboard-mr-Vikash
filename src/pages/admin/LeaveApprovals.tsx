@@ -1,9 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../../components/PageHeader';
-import { leaveRequests, users } from '../../lib/mockData';
-import { LeaveStatus } from '../../lib/types';
-
-const nameById = new Map(users.map((u) => [u.id, u.name]));
+import { getEmployees, getLeaveRequests, updateLeaveStatus } from '../../lib/api';
+import { LeaveRequest, LeaveStatus, User } from '../../lib/types';
 
 const statusClass: Record<LeaveStatus, string> = {
   pending: 'badge-warning',
@@ -12,13 +10,22 @@ const statusClass: Record<LeaveStatus, string> = {
 };
 
 export default function LeaveApprovals() {
-  const [, forceRender] = useState(0);
-  const sorted = [...leaveRequests].sort((a, b) => (a.appliedAt < b.appliedAt ? 1 : -1));
+  const [employees, setEmployees] = useState<User[]>([]);
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
 
-  function setStatus(id: string, status: LeaveStatus) {
-    const req = leaveRequests.find((l) => l.id === id);
-    if (req) req.status = status;
-    forceRender((n) => n + 1);
+  function refresh() {
+    getEmployees().then(setEmployees).catch(() => setEmployees([]));
+    getLeaveRequests().then(setRequests).catch(() => setRequests([]));
+  }
+
+  useEffect(refresh, []);
+
+  const nameById = new Map(employees.map((u) => [u.id, u.name]));
+  const sorted = [...requests].sort((a, b) => (a.appliedAt < b.appliedAt ? 1 : -1));
+
+  async function setStatus(id: string, status: LeaveStatus) {
+    await updateLeaveStatus(id, status);
+    refresh();
   }
 
   return (
@@ -41,8 +48,8 @@ export default function LeaveApprovals() {
             <tbody>
               {sorted.map((l) => (
                 <tr key={l.id}>
-                  <td>{nameById.get(l.userId)}</td>
-                  <td>{l.appliedAt}</td>
+                  <td>{nameById.get(l.userId) ?? '—'}</td>
+                  <td>{l.appliedAt.slice(0, 10)}</td>
                   <td>{l.startDate}</td>
                   <td>{l.endDate}</td>
                   <td>{l.reason}</td>
@@ -61,6 +68,13 @@ export default function LeaveApprovals() {
                   </td>
                 </tr>
               ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-ink-faint)', padding: 'var(--space-5)' }}>
+                    No leave requests yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

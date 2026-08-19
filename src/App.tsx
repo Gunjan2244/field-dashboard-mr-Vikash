@@ -20,7 +20,15 @@ function RequireAuth({ role, children }: { role: 'admin' | 'employee'; children:
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-ink-faint)' }}>
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <Routes>

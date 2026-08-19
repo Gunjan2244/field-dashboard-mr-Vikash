@@ -1,29 +1,38 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PageHeader from '../../components/PageHeader';
-import { districts, users, dailyEntries, isEditable } from '../../lib/mockData';
-import { METRIC_FIELDS } from '../../lib/types';
-
-const employees = users.filter((u) => u.role === 'employee');
-const nameById = new Map(users.map((u) => [u.id, u.name]));
-const districtById = new Map(districts.map((d) => [d.id, d.name]));
+import { getDistricts, getEmployees, getEntries } from '../../lib/api';
+import { isEditable } from '../../lib/dates';
+import { District, User, DailyEntry, METRIC_FIELDS } from '../../lib/types';
 
 export default function AdminEntries() {
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [employees, setEmployees] = useState<User[]>([]);
+  const [allEntries, setAllEntries] = useState<DailyEntry[]>([]);
   const [districtId, setDistrictId] = useState('all');
   const [employeeId, setEmployeeId] = useState('all');
   const [days, setDays] = useState(14);
+
+  useEffect(() => {
+    getDistricts().then(setDistricts).catch(() => setDistricts([]));
+    getEmployees().then(setEmployees).catch(() => setEmployees([]));
+    getEntries().then(setAllEntries).catch(() => setAllEntries([]));
+  }, []);
+
+  const nameById = useMemo(() => new Map(employees.map((u) => [u.id, u.name])), [employees]);
+  const districtById = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
 
   const rows = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
-    return dailyEntries
+    return allEntries
       .filter((e) => {
         if (districtId !== 'all' && e.districtId !== districtId) return false;
         if (employeeId !== 'all' && e.userId !== employeeId) return false;
         return e.date >= cutoffStr;
       })
       .sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [districtId, employeeId, days]);
+  }, [allEntries, districtId, employeeId, days]);
 
   const scopedEmployees = districtId === 'all' ? employees : employees.filter((e) => e.districtId === districtId);
   const selectStyle: React.CSSProperties = { height: 34, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-strong)', padding: '0 var(--space-3)', fontSize: 'var(--text-sm)' };
@@ -71,7 +80,7 @@ export default function AdminEntries() {
                   {METRIC_FIELDS.map((m) => <td key={m.key as string}>{r[m.key] as number}</td>)}
                   <td>
                     <span className={`badge ${isEditable(r.date) ? 'badge-positive' : 'badge-neutral'}`}>
-                      {isEditable(r.date) ? 'Editable' : 'Locked (admin override available)'}
+                      {isEditable(r.date) ? 'Editable' : 'Locked'}
                     </span>
                   </td>
                 </tr>

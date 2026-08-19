@@ -1,20 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
-import { dailyEntries, isEditable } from '../../lib/mockData';
-import { METRIC_FIELDS } from '../../lib/types';
+import { getEntries } from '../../lib/api';
+import { isEditable } from '../../lib/dates';
+import { DailyEntry, METRIC_FIELDS } from '../../lib/types';
 
 export default function History() {
   const { user } = useAuth();
   const [range, setRange] = useState(30);
+  const [rows, setRows] = useState<DailyEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const rows = useMemo(() => {
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - range);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
-    return dailyEntries
-      .filter((e) => e.userId === user!.id && e.date >= cutoffStr)
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    getEntries({ userId: user.id, since: cutoffStr })
+      .then((data) => !cancelled && setRows(data))
+      .catch(() => !cancelled && setRows([]))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, [user, range]);
 
   return (
@@ -56,7 +66,7 @@ export default function History() {
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {!loading && rows.length === 0 && (
                 <tr>
                   <td colSpan={METRIC_FIELDS.length + 2} style={{ textAlign: 'center', color: 'var(--color-ink-faint)', padding: 'var(--space-5)' }}>
                     No entries in this period.

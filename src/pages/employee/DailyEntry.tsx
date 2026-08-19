@@ -1,12 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
-import { dailyEntries, isEditable } from '../../lib/mockData';
-import { METRIC_FIELDS, DailyEntry } from '../../lib/types';
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { getEntryForDate, upsertEntry } from '../../lib/api';
+import { isEditable, todayIso } from '../../lib/dates';
+import { METRIC_FIELDS } from '../../lib/types';
 
 function emptyForm() {
   const f: Record<string, number> = {};
@@ -17,62 +14,70 @@ function emptyForm() {
 export default function DailyEntryPage() {
   const { user } = useAuth();
   const [date, setDate] = useState(todayIso());
+  const [form, setForm] = useState<Record<string, number>>(emptyForm());
+  const [hasExisting, setHasExisting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  const existing = useMemo(
-    () => dailyEntries.find((e) => e.userId === user!.id && e.date === date),
-    [date, user]
-  );
-
-  const [form, setForm] = useState<Record<string, number>>(() => {
-    if (existing) {
-      const f: Record<string, number> = {};
-      METRIC_FIELDS.forEach((m) => (f[m.key as string] = existing[m.key] as number));
-      return f;
-    }
-    return emptyForm();
-  });
+  const [error, setError] = useState('');
 
   const editable = isEditable(date);
 
-  function loadDate(newDate: string) {
-    setDate(newDate);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
     setSaved(false);
-    const e = dailyEntries.find((en) => en.userId === user!.id && en.date === newDate);
-    if (e) {
-      const f: Record<string, number> = {};
-      METRIC_FIELDS.forEach((m) => (f[m.key as string] = e[m.key] as number));
-      setForm(f);
-    } else {
-      setForm(emptyForm());
-    }
-  }
+    setError('');
+    getEntryForDate(user.id, date)
+      .then((existing) => {
+        if (cancelled) return;
+        if (existing) {
+          const f: Record<string, number> = {};
+          METRIC_FIELDS.forEach((m) => (f[m.key as string] = existing[m.key] as number));
+          setForm(f);
+          setHasExisting(true);
+        } else {
+          setForm(emptyForm());
+          setHasExisting(false);
+        }
+      })
+      .catch(() => !cancelled && setError('Could not load this entry.'))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [user, date]);
 
   function handleChange(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: Math.max(0, Number(value) || 0) }));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!user || !editable) return;
-    const idx = dailyEntries.findIndex((e) => e.userId === user.id && e.date === date);
-    const record: DailyEntry = {
-      id: existing?.id ?? `${user.id}-${date}`,
-      userId: user.id,
-      districtId: user.districtId as string,
-      date,
-      schoolsObserved: form.schoolsObserved,
-      classesObserved: form.classesObserved,
-      studentsAttended: form.studentsAttended,
-      teachersObserved: form.teachersObserved,
-      fieldVisits: form.fieldVisits,
-      storiesRead: form.storiesRead,
-      seelDone: form.seelDone,
-      updatedAt: new Date().toISOString(),
-    };
-    if (idx >= 0) dailyEntries[idx] = record;
-    else dailyEntries.push(record);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setSaving(true);
+    setError('');
+    try {
+      await upsertEntry({
+        userId: user.id,
+        districtId: user.districtId as string,
+        date,
+        schoolsObserved: form.schoolsObserved,
+        classesObserved: form.classesObserved,
+        studentsAttended: form.studentsAttended,
+        teachersObserved: form.teachersObserved,
+        fieldVisits: form.fieldVisits,
+        storiesRead: form.storiesRead,
+        seelDone: form.seelDone,
+      });
+      setHasExisting(true);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError('Could not save this entry. It may be outside the 2-day edit window.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -83,10 +88,10 @@ export default function DailyEntryPage() {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
             <div className="field" style={{ maxWidth: 200 }}>
               <label htmlFor="date">Date</label>
-              <input id="date" type="date" value={date} max={todayIso()} onChange={(e) => loadDate(e.target.value)} />
+              <input id="date" type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} />
             </div>
             {!editable && <span className="badge badge-neutral">Locked — older than 2 days</span>}
-            {editable && existing && <span className="badge badge-neutral">Editing existing entry</span>}
+            {editable && hasExisting && <span className="badge badge-neutral">Editing existing entry</span>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
@@ -98,7 +103,7 @@ export default function DailyEntryPage() {
                   type="number"
                   min={0}
                   value={form[m.key as string]}
-                  disabled={!editable}
+                  disabled={!editable || loading}
                   onChange={(e) => handleChange(m.key as string, e.target.value)}
                 />
               </div>
@@ -106,11 +111,12 @@ export default function DailyEntryPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-5)' }}>
-            <button className="btn btn-primary" disabled={!editable} onClick={handleSave}>
-              Save entry
+            <button className="btn btn-primary" disabled={!editable || loading || saving} onClick={handleSave}>
+              {saving ? 'Saving…' : 'Save entry'}
             </button>
             {saved && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-positive)' }}>Saved.</span>}
-            {!editable && (
+            {error && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-negative)' }}>{error}</span>}
+            {!editable && !error && (
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
                 Entries can only be edited within 2 days of the date. Contact your admin for corrections beyond that.
               </span>

@@ -2,19 +2,49 @@ import { FormEvent, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, signup } = useAuth();
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!password) {
-      setError('Enter your password.');
+    setError('');
+    setInfo('');
+    if (!email || !password) {
+      setError('Enter your email and password.');
       return;
     }
-    const result = login(email);
-    if (!result.ok) setError(result.error ?? 'Unable to sign in.');
+    if (mode === 'signup' && !name.trim()) {
+      setError('Enter your name.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (mode === 'signin') {
+        const result = await login(email, password);
+        if (!result.ok) setError(result.error ?? 'Unable to sign in.');
+      } else {
+        if (password.length < 8) {
+          setError('Password must be at least 8 characters.');
+          return;
+        }
+        const result = await signup(email, password, name);
+        if (!result.ok) {
+          setError(result.error ?? 'Unable to create account.');
+        } else if (result.needsConfirmation) {
+          setInfo('Account created. Check your email to confirm before signing in.');
+          setMode('signin');
+        }
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -29,9 +59,22 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} style={styles.form}>
+          {mode === 'signup' && (
+            <div className="field">
+              <label htmlFor="name">Name</label>
+              <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" autoFocus />
+            </div>
+          )}
           <div className="field">
             <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.in" autoFocus />
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@org.in"
+              autoFocus={mode === 'signin'}
+            />
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
@@ -39,17 +82,29 @@ export default function Login() {
           </div>
 
           {error && <div style={styles.error}>{error}</div>}
+          {info && <div style={styles.info}>{info}</div>}
 
-          <button type="submit" className="btn btn-primary" style={{ marginTop: 'var(--space-2)' }}>
-            Sign in
+          <button type="submit" className="btn btn-primary" disabled={submitting} style={{ marginTop: 'var(--space-2)' }}>
+            {submitting ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 
         <div style={styles.demoBox}>
-          <div style={styles.demoLabel}>Demo accounts</div>
-          <div style={styles.demoRow}>admin@org.in — Admin</div>
-          <div style={styles.demoRow}>ravi.k@org.in — Employee, Patna</div>
-          <div style={styles.demoHint}>Any password works in this preview build.</div>
+          {mode === 'signin' ? (
+            <>
+              <div style={styles.demoLabel}>New employee?</div>
+              <button className="btn btn-ghost" onClick={() => { setMode('signup'); setError(''); setInfo(''); }} style={{ padding: 0 }}>
+                Create an account
+              </button>
+              <div style={styles.demoHint}>
+                New accounts default to the employee role with no district assigned — ask your admin to assign your district.
+              </div>
+            </>
+          ) : (
+            <button className="btn btn-ghost" onClick={() => { setMode('signin'); setError(''); setInfo(''); }} style={{ padding: 0 }}>
+              Already have an account? Sign in
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -111,6 +166,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 'var(--space-2) var(--space-3)',
     borderRadius: 'var(--radius-sm)',
   },
+  info: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-positive)',
+    padding: 'var(--space-2) var(--space-3)',
+    borderRadius: 'var(--radius-sm)',
+  },
   demoBox: {
     marginTop: 'var(--space-5)',
     paddingTop: 'var(--space-4)',
@@ -123,11 +184,6 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     marginBottom: 'var(--space-2)',
-  },
-  demoRow: {
-    fontSize: 'var(--text-xs)',
-    color: 'var(--color-ink-soft)',
-    lineHeight: 1.8,
   },
   demoHint: {
     fontSize: 'var(--text-xs)',

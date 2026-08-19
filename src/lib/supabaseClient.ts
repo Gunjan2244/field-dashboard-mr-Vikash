@@ -1,11 +1,15 @@
-// Placeholder for the real Supabase connection.
-// Once a Supabase project exists, set these two env vars (e.g. in a .env file:
-// VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) and uncomment below.
-// Then swap the mock functions in this folder for real `supabase.from(...)` calls —
-// component code in /pages does not need to change, only the data-fetching layer.
+import { createClient } from '@supabase/supabase-js';
 
-// import { createClient } from '@supabase/supabase-js';
-// export const supabase = createClient(
-//   import.meta.env.VITE_SUPABASE_URL,
-//   import.meta.env.VITE_SUPABASE_ANON_KEY
-// );
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase env vars. Copy .env.example to .env and fill in VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.'
+  );
+}
+
+// This is the anon/publishable key — it is meant to be public and is safe to
+// ship in the client bundle. Actual data access is controlled by Row Level
+// Security policies in the database, not by keeping this key secret.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

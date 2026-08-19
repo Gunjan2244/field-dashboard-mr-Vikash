@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import PageHeader from '../../components/PageHeader';
 import FilterBar from '../../components/FilterBar';
 import KpiCard from '../../components/KpiCard';
 import ChartCard from '../../components/ChartCard';
-import { districts, users, dailyEntries } from '../../lib/mockData';
-import { METRIC_FIELDS, DailyEntry } from '../../lib/types';
+import { getDistricts, getEmployees, getEntries } from '../../lib/api';
+import { District, User, METRIC_FIELDS, DailyEntry } from '../../lib/types';
 import {
   Grain,
   aggregateByTime,
@@ -16,8 +16,6 @@ import {
   sumEntries,
   percentChange,
 } from '../../lib/aggregate';
-
-const employees = users.filter((u) => u.role === 'employee');
 
 const chartColors = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
@@ -31,20 +29,29 @@ function formatBucketLabel(bucket: string, grain: Grain) {
 }
 
 export default function AdminDashboard() {
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [employees, setEmployees] = useState<User[]>([]);
+  const [allEntries, setAllEntries] = useState<DailyEntry[]>([]);
   const [districtId, setDistrictId] = useState('all');
   const [employeeId, setEmployeeId] = useState('all');
   const [grain, setGrain] = useState<Grain>('weekly');
   const [metric, setMetric] = useState<keyof DailyEntry>('schoolsObserved');
 
+  useEffect(() => {
+    getDistricts().then(setDistricts).catch(() => setDistricts([]));
+    getEmployees().then(setEmployees).catch(() => setEmployees([]));
+    getEntries().then(setAllEntries).catch(() => setAllEntries([]));
+  }, []);
+
   const scopedEmployees = districtId === 'all' ? employees : employees.filter((e) => e.districtId === districtId);
 
   const baseEntries = useMemo(() => {
-    return dailyEntries.filter((e) => {
+    return allEntries.filter((e) => {
       if (districtId !== 'all' && e.districtId !== districtId) return false;
       if (employeeId !== 'all' && e.userId !== employeeId) return false;
       return true;
     });
-  }, [districtId, employeeId]);
+  }, [allEntries, districtId, employeeId]);
 
   const { start, end } = rangeForGrain(grain);
   const trendEntries = filterByRange(baseEntries, start, end);
@@ -69,7 +76,7 @@ export default function AdminDashboard() {
       const totals = sumEntries(scoped);
       return { name: item.name, value: totals[metric as string] };
     });
-  }, [districtId, employeeId, trendEntries, metric, scopedEmployees]);
+  }, [districtId, employeeId, districts, scopedEmployees, trendEntries, metric]);
 
   return (
     <>

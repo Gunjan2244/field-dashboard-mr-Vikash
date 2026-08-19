@@ -1,7 +1,7 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
-import { leaveRequests } from '../../lib/mockData';
+import { getLeaveRequests, createLeaveRequest } from '../../lib/api';
 import { LeaveRequest, LeaveStatus } from '../../lib/types';
 
 const statusClass: Record<LeaveStatus, string> = {
@@ -12,18 +12,23 @@ const statusClass: Record<LeaveStatus, string> = {
 
 export default function Leave() {
   const { user } = useAuth();
-  const [, forceRender] = useState(0);
+  const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const myRequests = useMemo(
-    () => leaveRequests.filter((l) => l.userId === user!.id).sort((a, b) => (a.appliedAt < b.appliedAt ? 1 : -1)),
-    [user, leaveRequests.length]
-  );
+  function refresh() {
+    if (!user) return;
+    getLeaveRequests({ userId: user.id })
+      .then(setMyRequests)
+      .catch(() => setMyRequests([]));
+  }
 
-  function handleSubmit(e: FormEvent) {
+  useEffect(refresh, [user]);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!startDate || !endDate) {
       setError('Select a start and end date.');
@@ -33,21 +38,19 @@ export default function Leave() {
       setError('End date cannot be before start date.');
       return;
     }
-    const record: LeaveRequest = {
-      id: `l-${Date.now()}`,
-      userId: user!.id,
-      startDate,
-      endDate,
-      reason: reason.trim() || '—',
-      status: 'pending',
-      appliedAt: new Date().toISOString().slice(0, 10),
-    };
-    leaveRequests.push(record);
-    setStartDate('');
-    setEndDate('');
-    setReason('');
+    setSubmitting(true);
     setError('');
-    forceRender((n) => n + 1);
+    try {
+      await createLeaveRequest({ userId: user!.id, startDate, endDate, reason: reason.trim() || '—' });
+      setStartDate('');
+      setEndDate('');
+      setReason('');
+      refresh();
+    } catch {
+      setError('Could not submit this request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -70,7 +73,9 @@ export default function Leave() {
               <input id="reason" type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Brief reason" />
             </div>
             {error && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-negative)' }}>{error}</div>}
-            <button className="btn btn-primary" type="submit">Submit request</button>
+            <button className="btn btn-primary" type="submit" disabled={submitting}>
+              {submitting ? 'Submitting…' : 'Submit request'}
+            </button>
           </form>
         </div>
 
@@ -88,7 +93,7 @@ export default function Leave() {
             <tbody>
               {myRequests.map((l) => (
                 <tr key={l.id}>
-                  <td>{l.appliedAt}</td>
+                  <td>{l.appliedAt.slice(0, 10)}</td>
                   <td>{l.startDate}</td>
                   <td>{l.endDate}</td>
                   <td>{l.reason}</td>
