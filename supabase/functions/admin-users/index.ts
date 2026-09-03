@@ -79,16 +79,24 @@ Deno.serve(async (req) => {
       });
       if (createErr || !created.user) return json({ error: createErr?.message ?? 'Could not create the account.' }, 400);
 
+      // Upsert rather than insert: if anything else on the project (a DB
+      // trigger, a retried request) already created a profiles row for this
+      // new auth user id, we still want this call to end up with exactly the
+      // name/role/district/status the admin submitted, instead of failing on
+      // a primary-key conflict.
       const { data: profile, error: insertErr } = await admin
         .from('profiles')
-        .insert({
-          id: created.user.id,
-          name: name.trim(),
-          email: email.trim(),
-          role: 'employee',
-          district_id: districtId ?? null,
-          status: 'active',
-        })
+        .upsert(
+          {
+            id: created.user.id,
+            name: name.trim(),
+            email: email.trim(),
+            role: 'employee',
+            district_id: districtId ?? null,
+            status: 'active',
+          },
+          { onConflict: 'id' }
+        )
         .select('*')
         .single();
 
