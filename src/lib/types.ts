@@ -5,6 +5,21 @@ export interface District {
   name: string;
 }
 
+export interface MetricField {
+  id: string;
+  projectId: string;
+  key: string; // machine key, unique within a project, used inside DailyEntry.metrics
+  label: string;
+  sortOrder: number;
+}
+
+export interface Project {
+  id: string;
+  districtId: string;
+  name: string;
+  metricFields: MetricField[];
+}
+
 export interface User {
   id: string;
   name: string;
@@ -18,35 +33,8 @@ export interface DailyEntry {
   id: string;
   userId: string;
   districtId: string;
+  projectId: string;
   date: string; // ISO yyyy-mm-dd
-  schoolsObserved: number;
-  classesObserved: number;
-  studentsAttended: number;
-  teachersObserved: number;
-  fieldVisits: number;
-  storiesRead: number;
-  seelDone: number;
+  metrics: Record<string, number>; // keyed by MetricField.key, fully dynamic per project
   updatedAt: string;
 }
-
-export type LeaveStatus = 'pending' | 'approved' | 'rejected';
-
-export interface LeaveRequest {
-  id: string;
-  userId: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-  status: LeaveStatus;
-  appliedAt: string;
-}
-
-export const METRIC_FIELDS: { key: keyof DailyEntry; label: string }[] = [
-  { key: 'schoolsObserved', label: 'Schools Observed' },
-  { key: 'classesObserved', label: 'Classes Observed' },
-  { key: 'studentsAttended', label: 'Students Attended' },
-  { key: 'teachersObserved', label: 'Teachers Observed' },
-  { key: 'fieldVisits', label: 'Field Visits' },
-  { key: 'storiesRead', label: 'Stories Read' },
-  { key: 'seelDone', label: 'SEEL Done' },
-];

@@ -7,7 +7,6 @@ import { District } from '../lib/types';
 const employeeLinks = [
   { to: '/app/entry', label: 'Daily Entry' },
   { to: '/app/history', label: 'My History' },
-  { to: '/app/leave', label: 'Leave' },
   { to: '/app/stats', label: 'My Stats' },
 ];
 
@@ -15,7 +14,7 @@ const adminLinks = [
   { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/entries', label: 'All Entries' },
   { to: '/admin/employees', label: 'Employees' },
-  { to: '/admin/leave', label: 'Leave Approvals' },
+  { to: '/admin/structure', label: 'Districts & Projects' },
 ];
 
 export default function Layout() {

@@ -5,12 +5,11 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import DailyEntry from './pages/employee/DailyEntry';
 import History from './pages/employee/History';
-import Leave from './pages/employee/Leave';
 import Stats from './pages/employee/Stats';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminEntries from './pages/admin/Entries';
 import Employees from './pages/admin/Employees';
-import LeaveApprovals from './pages/admin/LeaveApprovals';
+import Structure from './pages/admin/Structure';
 
 function RequireAuth({ role, children }: { role: 'admin' | 'employee'; children: ReactElement }) {
   const { user } = useAuth();
@@ -37,7 +36,6 @@ export default function App() {
       <Route element={<RequireAuth role="employee"><Layout /></RequireAuth>}>
         <Route path="/app/entry" element={<DailyEntry />} />
         <Route path="/app/history" element={<History />} />
-        <Route path="/app/leave" element={<Leave />} />
         <Route path="/app/stats" element={<Stats />} />
       </Route>
 
@@ -45,7 +43,7 @@ export default function App() {
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/entries" element={<AdminEntries />} />
         <Route path="/admin/employees" element={<Employees />} />
-        <Route path="/admin/leave" element={<LeaveApprovals />} />
+        <Route path="/admin/structure" element={<Structure />} />
       </Route>
 
       <Route path="*" element={<Navigate to={user ? (user.role === 'admin' ? '/admin/dashboard' : '/app/entry') : '/login'} replace />} />

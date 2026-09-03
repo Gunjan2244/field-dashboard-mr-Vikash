@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { District, User, Role, DailyEntry, LeaveRequest, LeaveStatus } from './types';
+import { District, User, Role, Project, MetricField, DailyEntry } from './types';
 
 // ============================================================
 // Row <-> app-type mappers (DB uses snake_case, app uses camelCase)
@@ -23,33 +23,38 @@ function rowToUser(row: any): User {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToMetricField(row: any): MetricField {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    key: row.key,
+    label: row.label,
+    sortOrder: row.sort_order,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToProject(row: any): Project {
+  return {
+    id: row.id,
+    districtId: row.district_id,
+    name: row.name,
+    metricFields: (row.project_metric_fields ?? [])
+      .map(rowToMetricField)
+      .sort((a: MetricField, b: MetricField) => a.sortOrder - b.sortOrder),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToEntry(row: any): DailyEntry {
   return {
     id: row.id,
     userId: row.user_id,
     districtId: row.district_id,
+    projectId: row.project_id,
     date: row.entry_date,
-    schoolsObserved: row.schools_observed,
-    classesObserved: row.classes_observed,
-    studentsAttended: row.students_attended,
-    teachersObserved: row.teachers_observed,
-    fieldVisits: row.field_visits,
-    storiesRead: row.stories_read,
-    seelDone: row.seel_done,
+    metrics: row.metrics ?? {},
     updatedAt: row.updated_at,
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToLeave(row: any): LeaveRequest {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    reason: row.reason,
-    status: row.status as LeaveStatus,
-    appliedAt: row.applied_at,
   };
 }
 
@@ -66,7 +71,7 @@ export async function getProfile(userId: string): Promise<User | null> {
 }
 
 // ============================================================
-// Districts
+// Districts (admin-defined)
 // ============================================================
 
 export async function getDistricts(): Promise<District[]> {
@@ -75,8 +80,99 @@ export async function getDistricts(): Promise<District[]> {
   return (data ?? []).map(rowToDistrict);
 }
 
+export async function createDistrict(name: string): Promise<District> {
+  const { data, error } = await supabase.from('districts').insert({ name }).select('*').single();
+  if (error) throw error;
+  return rowToDistrict(data);
+}
+
+export async function updateDistrict(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from('districts').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteDistrict(id: string): Promise<void> {
+  const { error } = await supabase.from('districts').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // ============================================================
-// Employees (admin-only in practice — RLS enforces this regardless of UI)
+// Projects (admin-defined, each belongs to one district, each has its
+// own fully dynamic set of metric fields)
+// ============================================================
+
+const PROJECT_SELECT = '*, project_metric_fields(*)';
+
+export async function getProjects(opts: { districtId?: string } = {}): Promise<Project[]> {
+  let q = supabase.from('projects').select(PROJECT_SELECT);
+  if (opts.districtId) q = q.eq('district_id', opts.districtId);
+  const { data, error } = await q.order('name');
+  if (error) throw error;
+  return (data ?? []).map(rowToProject);
+}
+
+export async function getProject(id: string): Promise<Project | null> {
+  const { data, error } = await supabase.from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? rowToProject(data) : null;
+}
+
+export async function createProject(districtId: string, name: string): Promise<Project> {
+  const { data, error } = await supabase
+    .from('projects')
+    .insert({ district_id: districtId, name })
+    .select(PROJECT_SELECT)
+    .single();
+  if (error) throw error;
+  return rowToProject(data);
+}
+
+export async function updateProject(id: string, patch: { name?: string; districtId?: string }): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: any = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.districtId !== undefined) payload.district_id = patch.districtId;
+  const { error } = await supabase.from('projects').update(payload).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const { error } = await supabase.from('projects').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ------------------------------------------------------------
+// Metric fields — fully dynamic, defined per-project by the admin
+// ------------------------------------------------------------
+
+export async function createMetricField(projectId: string, key: string, label: string, sortOrder = 0): Promise<MetricField> {
+  const { data, error } = await supabase
+    .from('project_metric_fields')
+    .insert({ project_id: projectId, key, label, sort_order: sortOrder })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return rowToMetricField(data);
+}
+
+export async function updateMetricField(id: string, patch: { label?: string; sortOrder?: number }): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: any = {};
+  if (patch.label !== undefined) payload.label = patch.label;
+  if (patch.sortOrder !== undefined) payload.sort_order = patch.sortOrder;
+  const { error } = await supabase.from('project_metric_fields').update(payload).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteMetricField(id: string): Promise<void> {
+  const { error } = await supabase.from('project_metric_fields').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ============================================================
+// Employees — admin creates users, changes passwords, deletes them,
+// and assigns a district. These mutate auth.users, so they run through
+// the `admin-users` edge function using the service role key server-side.
 // ============================================================
 
 export async function getEmployees(): Promise<User[]> {
@@ -97,16 +193,48 @@ export async function updateEmployee(
   if (error) throw error;
 }
 
+async function callAdminUsers<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('admin-users', { body: { action, ...payload } });
+  if (error) {
+    // Prefer the JSON error message the function returned, if any.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const context = (error as any)?.context;
+    const detail = context && typeof context.json === 'function' ? await context.json().catch(() => null) : null;
+    throw new Error(detail?.error ?? error.message ?? 'Request failed.');
+  }
+  return data as T;
+}
+
+export async function createEmployee(input: {
+  name: string;
+  email: string;
+  password: string;
+  districtId: string | null;
+}): Promise<User> {
+  const data = await callAdminUsers<{ profile: unknown }>('create', input);
+  return rowToUser(data.profile);
+}
+
+export async function setEmployeePassword(id: string, password: string): Promise<void> {
+  await callAdminUsers('set_password', { id, password });
+}
+
+export async function deleteEmployee(id: string): Promise<void> {
+  await callAdminUsers('delete', { id });
+}
+
 // ============================================================
-// Daily entries
+// Daily entries — one per employee per date, employee picks the project
+// for that date; the metric values are whatever fields that project defines.
 // ============================================================
 
 export async function getEntries(
-  opts: { userId?: string; districtId?: string; since?: string } = {}
+  opts: { userId?: string; districtId?: string; projectId?: string; since?: string } = {}
 ): Promise<DailyEntry[]> {
   let q = supabase.from('daily_entries').select('*');
   if (opts.userId) q = q.eq('user_id', opts.userId);
   if (opts.districtId) q = q.eq('district_id', opts.districtId);
+  if (opts.projectId) q = q.eq('project_id', opts.projectId);
   if (opts.since) q = q.gte('entry_date', opts.since);
   const { data, error } = await q.order('entry_date', { ascending: false });
   if (error) throw error;
@@ -127,14 +255,9 @@ export async function getEntryForDate(userId: string, date: string): Promise<Dai
 export interface EntryInput {
   userId: string;
   districtId: string;
+  projectId: string;
   date: string;
-  schoolsObserved: number;
-  classesObserved: number;
-  studentsAttended: number;
-  teachersObserved: number;
-  fieldVisits: number;
-  storiesRead: number;
-  seelDone: number;
+  metrics: Record<string, number>;
 }
 
 /**
@@ -148,50 +271,12 @@ export async function upsertEntry(entry: EntryInput): Promise<void> {
     {
       user_id: entry.userId,
       district_id: entry.districtId,
+      project_id: entry.projectId,
       entry_date: entry.date,
-      schools_observed: entry.schoolsObserved,
-      classes_observed: entry.classesObserved,
-      students_attended: entry.studentsAttended,
-      teachers_observed: entry.teachersObserved,
-      field_visits: entry.fieldVisits,
-      stories_read: entry.storiesRead,
-      seel_done: entry.seelDone,
+      metrics: entry.metrics,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,entry_date' }
   );
-  if (error) throw error;
-}
-
-// ============================================================
-// Leave requests
-// ============================================================
-
-export async function getLeaveRequests(opts: { userId?: string } = {}): Promise<LeaveRequest[]> {
-  let q = supabase.from('leave_requests').select('*');
-  if (opts.userId) q = q.eq('user_id', opts.userId);
-  const { data, error } = await q.order('applied_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map(rowToLeave);
-}
-
-export async function createLeaveRequest(req: {
-  userId: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-}): Promise<void> {
-  const { error } = await supabase.from('leave_requests').insert({
-    user_id: req.userId,
-    start_date: req.startDate,
-    end_date: req.endDate,
-    reason: req.reason,
-    status: 'pending',
-  });
-  if (error) throw error;
-}
-
-export async function updateLeaveStatus(id: string, status: LeaveStatus): Promise<void> {
-  const { error } = await supabase.from('leave_requests').update({ status }).eq('id', id);
   if (error) throw error;
 }

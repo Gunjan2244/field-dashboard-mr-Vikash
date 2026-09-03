@@ -1,19 +1,11 @@
-import { DailyEntry, METRIC_FIELDS } from './types';
+import { DailyEntry } from './types';
 
 export type Grain = 'daily' | 'weekly' | 'monthly' | 'all-time';
 
-const NUMERIC_KEYS = METRIC_FIELDS.map((m) => m.key) as (keyof DailyEntry)[];
-
-function emptyTotals(): Record<string, number> {
-  const t: Record<string, number> = {};
-  NUMERIC_KEYS.forEach((k) => (t[k as string] = 0));
-  return t;
-}
-
 function addEntry(target: Record<string, number>, entry: DailyEntry) {
-  NUMERIC_KEYS.forEach((k) => {
-    target[k as string] += entry[k] as number;
-  });
+  for (const [key, value] of Object.entries(entry.metrics)) {
+    target[key] = (target[key] ?? 0) + (value || 0);
+  }
 }
 
 function weekKey(dateStr: string): string {
@@ -35,12 +27,12 @@ export function bucketKey(dateStr: string, grain: Grain): string {
   return 'all';
 }
 
-/** Rolls entries into time buckets, summing every metric. Sorted ascending by bucket. */
+/** Rolls entries into time buckets, summing every metric present on each entry. Sorted ascending by bucket. */
 export function aggregateByTime(entries: DailyEntry[], grain: Grain) {
   const buckets = new Map<string, Record<string, number>>();
   for (const e of entries) {
     const key = bucketKey(e.date, grain);
-    if (!buckets.has(key)) buckets.set(key, emptyTotals());
+    if (!buckets.has(key)) buckets.set(key, {});
     addEntry(buckets.get(key)!, e);
   }
   return Array.from(buckets.entries())
@@ -48,9 +40,9 @@ export function aggregateByTime(entries: DailyEntry[], grain: Grain) {
     .map(([key, totals]) => ({ bucket: key, ...totals }));
 }
 
-/** Sums every metric across the given entries into a single totals object. */
-export function sumEntries(entries: DailyEntry[]) {
-  const totals = emptyTotals();
+/** Sums every metric across the given entries into a single totals object, keyed by metric field key. */
+export function sumEntries(entries: DailyEntry[]): Record<string, number> {
+  const totals: Record<string, number> = {};
   entries.forEach((e) => addEntry(totals, e));
   return totals;
 }

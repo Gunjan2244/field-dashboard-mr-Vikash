@@ -1,4 +1,4 @@
-import { District, User } from '../lib/types';
+import { District, Project, User } from '../lib/types';
 import { Grain } from '../lib/aggregate';
 
 const selectStyle: React.CSSProperties = {
@@ -14,20 +14,26 @@ const selectStyle: React.CSSProperties = {
 export default function FilterBar({
   districts,
   employees,
+  projects,
   districtId,
   employeeId,
+  projectId,
   grain,
   onDistrictChange,
   onEmployeeChange,
+  onProjectChange,
   onGrainChange,
 }: {
   districts: District[];
   employees: User[];
+  projects?: Project[];
   districtId: string;
   employeeId: string;
+  projectId?: string;
   grain: Grain;
   onDistrictChange: (v: string) => void;
   onEmployeeChange: (v: string) => void;
+  onProjectChange?: (v: string) => void;
   onGrainChange: (v: Grain) => void;
 }) {
   return (
@@ -38,6 +44,15 @@ export default function FilterBar({
           <option key={d.id} value={d.id}>{d.name}</option>
         ))}
       </select>
+
+      {projects && onProjectChange && (
+        <select style={selectStyle} value={projectId ?? 'all'} onChange={(e) => onProjectChange(e.target.value)}>
+          <option value="all">All projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      )}
 
       <select style={selectStyle} value={employeeId} onChange={(e) => onEmployeeChange(e.target.value)}>
         <option value="all">All employees</option>

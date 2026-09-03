@@ -7,8 +7,8 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  signup: (email: string, password: string, name: string) => Promise<{ ok: boolean; error?: string; needsConfirmation?: boolean }>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -63,29 +63,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
-  async function signup(email: string, password: string, name: string) {
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { name: name.trim() } },
-    });
-    if (error) return { ok: false, error: error.message };
-
-    // If email confirmation is required, there will be no session yet.
-    if (!data.session) {
-      return { ok: true, needsConfirmation: true };
-    }
-    const profile = await getProfile(data.user!.id).catch(() => null);
-    setUser(profile);
-    return { ok: true };
-  }
-
   async function logout() {
     await supabase.auth.signOut();
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, loading, login, signup, logout }}>{children}</AuthContext.Provider>;
+  async function refreshProfile() {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) return;
+    const profile = await getProfile(data.user.id).catch(() => null);
+    setUser(profile);
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshProfile }}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
